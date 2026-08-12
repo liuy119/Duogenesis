@@ -35,6 +35,8 @@
         token: getToken,
         setToken: setToken,
         me: function () { return req('GET', '/api/me'); },
+        readEchoes: function () { return req('POST', '/api/me/read-echoes'); },
+        echoes: function () { return req('GET', '/api/echoes'); },
         register: function (email, password, name) {
             return req('POST', '/api/register', { email: email, password: password, name: name });
         },
@@ -53,6 +55,10 @@
         createComment: function (postId, text) {
             return req('POST', '/api/posts/' + postId + '/comments', { text: text });
         },
+        addReaction: function (postId, type) {
+            return req('POST', '/api/posts/' + postId + '/reactions', { type: type });
+        },
+        postReactions: function (postId) { return req('GET', '/api/posts/' + postId + '/reactions'); },
         items: function () { return req('GET', '/api/items'); },
         createItem: function (data) { return req('POST', '/api/items', data); },
         createOrder: function (itemId) {

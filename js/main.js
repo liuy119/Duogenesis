@@ -31,10 +31,12 @@
         if (io) io.observe(el); else el.classList.add('revealed');
     });
 
-    // 数字滚动
+    // 数字滚动：初始值已等于目标值（如 insights 预渲染真实数字）则跳过动画，防 0 闪烁
     function animateNum(el) {
         var target = parseFloat(el.getAttribute('data-target'));
         if (isNaN(target)) return;
+        var initial = parseFloat(el.textContent);
+        if (!isNaN(initial) && initial === target) return;
         var dec = parseInt(el.getAttribute('data-dec') || '0', 10);
         var dur = 1400, t0 = null;
         function step(ts) {
