@@ -1,4 +1,8 @@
 User-agent: *
 Allow: /
 
+# 智能体机器可读入口
+Allow: /agents/manifest.json
+Allow: /llms.txt
+
 Sitemap: https://duogenesis.cn/sitemap.xml
