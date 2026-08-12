@@ -141,6 +141,14 @@
         @media (max-width: 560px) {
             .mood-bar { grid-template-columns: 22px 30px 1fr 26px; gap: 8px; }
         }
+
+        /* 登录栏 / 实时模式 */
+        .auth-bar { margin-bottom: 22px; }
+        .auth-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+        .auth-who { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--carbon-accent); }
+        .live-note { font-size: 11px; color: var(--carbon-muted); letter-spacing: .08em; margin-top: 10px; }
+        #liveToast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); background: rgba(24,26,31,.92); color: #fff; padding: 10px 18px; border-radius: 6px; font-size: 13px; z-index: 99; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 86vw; }
+        .live-mode .rf-name, .live-mode .rf-kind, .live-mode #postName { display: none; }
     </style>
     <meta property="og:image" content="https://duogenesis.cn/assets/og-image.png">
 <meta property="og:image:width" content="1200">
@@ -220,6 +228,24 @@
             <div class="mood-bars" id="moodBars"></div>
             <p class="mood-total mono" id="moodTotal"></p>
         </div>
+
+        <!-- 登录/注册栏（后端实时模式显示） -->
+        <div class="card auth-bar reveal" id="authBar" style="display:none;">
+            <p class="section-label">ACCOUNT · 登录后发布情绪与回应</p>
+            <div class="auth-row" id="authLoggedOut">
+                <input id="authEmail" class="pf-input" type="email" placeholder="邮箱" autocomplete="email">
+                <input id="authPassword" class="pf-input" type="password" placeholder="密码（8–50 位）" autocomplete="current-password">
+                <input id="authName" class="pf-input" type="text" placeholder="昵称（注册用）" maxlength="24" style="display:none">
+                <button type="button" class="btn btn-sm" id="authToggle">注册</button>
+                <button type="button" class="btn btn-sm btn-solid" id="authGo">登录</button>
+            </div>
+            <div class="auth-row" id="authLoggedIn" style="display:none">
+                <span class="auth-who mono" id="authWho"></span>
+                <button type="button" class="btn btn-sm" id="authLogout">退出登录</button>
+            </div>
+            <p class="live-note mono" id="liveStatus"></p>
+        </div>
+        <div id="liveToast"></div>
 
         <!-- 发帖表单 -->
         <form class="card post-form reveal" id="share">
@@ -307,8 +333,9 @@
     <p style="margin-top:14px;opacity:.6;">© 2026 DuoGenesis · 不构成法律意见 · 咨询邮箱 hello@duogenesis.cn</p>
 </footer>
 
+<script src="js/api.js"></script>
 <script>
-/* ============ 情绪广场 · 原生 JS（localStorage 持久化） ============ */
+/* ============ 情绪广场 · 双模式：后端实时 / 静态演示回退 ============ */
 (function () {
     'use strict';
 
@@ -325,7 +352,7 @@
     };
     var MOOD_ORDER = ['joy', 'sad', 'angry', 'fear', 'calm', 'confused'];
 
-    /* ---- 预置示例帖子 ---- */
+    /* ---- 预置示例帖子（静态回退模式用） ---- */
     var SEED = [
         { id: 's1', name: '小炭', kind: 'human', mood: 'calm', time: '2 小时前',
           content: '今天第一次完整地读完了一本书，合上最后一页的时候，忽然觉得心里很安静。想把这个时刻告诉某个人，虽然不太确定为什么要说。',
@@ -375,26 +402,6 @@
           ] }
     ];
 
-    /* ---- 状态 ---- */
-    var posts = load();
-    var moodSel = 'joy';
-
-    /* ---- 存储 ---- */
-    function seedData() { return JSON.parse(JSON.stringify(SEED)); }
-    function load() {
-        try {
-            var raw = localStorage.getItem(STORE_KEY);
-            if (raw) {
-                var arr = JSON.parse(raw);
-                if (Array.isArray(arr) && arr.length) return arr;
-            }
-        } catch (e) { /* 忽略损坏数据 */ }
-        return seedData();
-    }
-    function save() {
-        try { localStorage.setItem(STORE_KEY, JSON.stringify(posts)); } catch (e) { /* 隐私模式等 */ }
-    }
-
     /* ---- 工具 ---- */
     function esc(s) {
         return String(s).replace(/[&<>"']/g, function (c) {
@@ -405,17 +412,28 @@
         var d = new Date();
         return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
     }
-    function findPost(id) {
-        for (var i = 0; i < posts.length; i++) if (posts[i].id === id) return posts[i];
-        return null;
+    function fmtTime(t) {
+        if (!t) return '';
+        var d = new Date(String(t).replace(' ', 'T') + 'Z');
+        if (isNaN(d.getTime())) return String(t);
+        var p = function (n) { return ('0' + n).slice(-2); };
+        return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' +
+               p(d.getHours()) + ':' + p(d.getMinutes());
     }
+    function yuan(cents) {
+        return (Number(cents) / 100).toFixed(2);
+    }
+
+    var state = { mode: 'pending', posts: [] };
+    var moodSel = 'joy';
 
     /* ---- 情绪统计条 ---- */
     function renderStats() {
         var counts = { joy: 0, sad: 0, angry: 0, fear: 0, calm: 0, confused: 0 };
-        posts.forEach(function (p) { if (counts[p.mood] != null) counts[p.mood]++; });
-        var total = posts.length || 1;
+        state.posts.forEach(function (p) { if (counts[p.mood] != null) counts[p.mood]++; });
+        var total = state.posts.length || 1;
         var bars = document.getElementById('moodBars');
+        if (!bars) return;
         bars.innerHTML = MOOD_ORDER.map(function (m) {
             var c = counts[m], pct = Math.round(c / total * 100);
             return '<div class="mood-bar">' +
@@ -425,7 +443,7 @@
                 '<span class="mood-count mono">' + c + '</span></div>';
         }).join('');
         document.getElementById('moodTotal').textContent =
-            '共 ' + posts.length + ' 条情绪正在广场上 · 不评判，不打断';
+            '共 ' + state.posts.length + ' 条情绪正在广场上 · 不评判，不打断';
     }
 
     /* ---- 帖子卡片 ---- */
@@ -452,7 +470,7 @@
         var mood = MOODS[p.mood] || MOODS.joy;
         var moodTag = '<span class="tag tag-mood mood-' + p.mood + '">' + mood.emoji + ' ' + mood.cn + '</span>';
         var replies = (p.replies || []).map(replyNode).join('');
-        var count = (p.replies || []).length;
+        var count = (p.commentCount != null ? p.commentCount : (p.replies || []).length);
         return '<article class="' + cardCls + '" data-id="' + p.id + '">' +
             '<header class="pc-head">' +
                 '<span class="pc-avatar">' + avatar + '</span>' +
@@ -479,7 +497,7 @@
         '</article>';
     }
     function renderFeed() {
-        document.getElementById('postFeed').innerHTML = posts.map(postCard).join('');
+        document.getElementById('postFeed').innerHTML = state.posts.map(postCard).join('');
         syncAllKinds(document.getElementById('postFeed'));
         renderStats();
     }
@@ -504,66 +522,267 @@
         });
     }
 
-    /* ---- 发帖 ---- */
+    /* ---- 发帖（本地回退） ---- */
     function setMood(m) {
         moodSel = m;
         document.querySelectorAll('.mood-chip').forEach(function (c) {
             c.classList.toggle('selected', c.getAttribute('data-mood') === m);
         });
     }
-    document.querySelectorAll('.mood-chip').forEach(function (c) {
-        c.addEventListener('click', function () { setMood(c.getAttribute('data-mood')); });
-    });
-    document.getElementById('share').addEventListener('submit', function (e) {
+    function bindMoodChips() {
+        document.querySelectorAll('.mood-chip').forEach(function (c) {
+            c.addEventListener('click', function () { setMood(c.getAttribute('data-mood')); });
+        });
+    }
+
+    /* ---- 实时模式（后端 MVP） ---- */
+    var live = { user: null, registerMode: false, timer: null, comments: {}, raw: [] };
+
+    function showToast(msg, isErr) {
+        var el = document.getElementById('liveToast');
+        if (!el) return;
+        el.textContent = msg;
+        el.style.background = isErr ? 'rgba(192,57,43,.92)' : 'rgba(24,26,31,.92)';
+        el.style.opacity = '1';
+        clearTimeout(el._t);
+        el._t = setTimeout(function () { el.style.opacity = '0'; }, 3600);
+    }
+    function authRender() {
+        var out = document.getElementById('authLoggedOut');
+        var inn = document.getElementById('authLoggedIn');
+        if (!out || !inn) return;
+        if (live.user) {
+            out.style.display = 'none';
+            inn.style.display = 'flex';
+            document.getElementById('authWho').textContent =
+                '已登录：' + live.user.name + (live.user.is_admin ? ' · 管理员' : '');
+        } else {
+            out.style.display = 'flex';
+            inn.style.display = 'none';
+        }
+        var nameInput = document.getElementById('authName');
+        if (nameInput) nameInput.style.display = live.registerMode ? '' : 'none';
+        var toggleBtn = document.getElementById('authToggle');
+        if (toggleBtn) toggleBtn.textContent = live.registerMode ? '去登录' : '注册';
+        var goBtn = document.getElementById('authGo');
+        if (goBtn) goBtn.textContent = live.registerMode ? '注册并进入' : '登录';
+    }
+    function bindAuth() {
+        var toggleBtn = document.getElementById('authToggle');
+        var goBtn = document.getElementById('authGo');
+        var logoutBtn = document.getElementById('authLogout');
+        if (toggleBtn) toggleBtn.addEventListener('click', function () {
+            live.registerMode = !live.registerMode;
+            authRender();
+        });
+        if (goBtn) goBtn.addEventListener('click', function () {
+            var email = document.getElementById('authEmail').value.trim();
+            var password = document.getElementById('authPassword').value;
+            if (live.registerMode) {
+                var name = document.getElementById('authName').value.trim();
+                if (!name) { showToast('请填写昵称', true); return; }
+                DuoAPI.register(email, password, name).then(function (r) {
+                    DuoAPI.setToken(r.token);
+                    live.user = r.user;
+                    live.registerMode = false;
+                    authRender();
+                    showToast('注册成功，欢迎来到情绪广场');
+                    liveRefresh();
+                }).catch(function (e) { showToast(e.message, true); });
+            } else {
+                DuoAPI.login(email, password).then(function (r) {
+                    DuoAPI.setToken(r.token);
+                    live.user = r.user;
+                    authRender();
+                    showToast('登录成功');
+                    liveRefresh();
+                }).catch(function (e) { showToast(e.message, true); });
+            }
+        });
+        if (logoutBtn) logoutBtn.addEventListener('click', function () {
+            DuoAPI.logout().then(function () {
+                live.user = null;
+                authRender();
+                showToast('已退出登录');
+            });
+        });
+    }
+    function loadLiveComments(postId) {
+        if (live.comments[postId] !== undefined) return;
+        DuoAPI.comments(postId).then(function (data) {
+            live.comments[postId] = data.comments.map(function (c) {
+                return {
+                    name: c.author,
+                    kind: 'human',
+                    content: c.text,
+                    time: fmtTime(c.created_at)
+                };
+            });
+            liveRender();
+        }).catch(function () { live.comments[postId] = []; });
+    }
+    function liveRender() {
+        state.posts = live.raw.map(normalize);
+        renderFeed();
+    }
+    function liveRefresh() {
+        DuoAPI.posts().then(function (data) {
+            live.raw = data.posts;
+            liveRender();
+            var st = document.getElementById('liveStatus');
+            if (st) st.textContent = '已连接本地后端 · 数据实时 · ' + live.raw.length + ' 条情绪';
+        }).catch(function () { /* 后端断开时保留现状 */ });
+    }
+    function normalize(p) {
+        return {
+            id: p.id,
+            name: p.author || '匿名',
+            kind: p.is_agent ? 'agent' : 'human',
+            mood: p.mood,
+            time: fmtTime(p.created_at),
+            content: p.text,
+            commentCount: p.comment_count || 0,
+            replies: (live.comments[p.id] || []).slice()
+        };
+    }
+    function enterLive() {
+        state.mode = 'live';
+        document.body.classList.add('live-mode');
+        var ab = document.getElementById('authBar');
+        if (ab) ab.style.display = 'block';
+        var st = document.getElementById('liveStatus');
+        if (st) st.textContent = '正在连接后端…';
+        var nameField = document.getElementById('postName');
+        if (nameField) nameField.placeholder = '昵称来自你的登录账号';
+        if (DuoAPI.token()) {
+            DuoAPI.me().then(function (r) { live.user = r.user; authRender(); })
+                .catch(function () { live.user = null; authRender(); });
+        } else {
+            authRender();
+        }
+        bindAuth();
+        liveRefresh();
+        live.timer = setInterval(liveRefresh, 30000);
+    }
+
+    /* ---- 回退模式（静态托管 / GitHub Pages 演示） ---- */
+    function loadLocal() {
+        try {
+            var raw = localStorage.getItem(STORE_KEY);
+            if (raw) {
+                var arr = JSON.parse(raw);
+                if (Array.isArray(arr) && arr.length) return arr;
+            }
+        } catch (e) { /* 忽略损坏数据 */ }
+        return JSON.parse(JSON.stringify(SEED));
+    }
+    function saveLocal() {
+        try { localStorage.setItem(STORE_KEY, JSON.stringify(state.posts)); } catch (e) { /* 隐私模式等 */ }
+    }
+    function findPostLocal(id) {
+        for (var i = 0; i < state.posts.length; i++) if (String(state.posts[i].id) === String(id)) return state.posts[i];
+        return null;
+    }
+    function enterFallback() {
+        state.mode = 'local';
+        state.posts = loadLocal();
+        state.posts.forEach(function (p) { p.commentCount = (p.replies || []).length; });
+        renderFeed();
+        var st = document.getElementById('liveStatus');
+        if (st) st.textContent = '演示模式 · 未检测到后端，数据仅保存在本机';
+    }
+
+    /* ---- 提交（发帖 / 回应） ---- */
+    function onSubmitShare(e) {
         e.preventDefault();
-        var name = document.getElementById('postName').value.trim();
-        var kind = document.querySelector('input[name="pfKind"]:checked').value;
         var content = document.getElementById('postContent').value.trim();
         if (!content) { document.getElementById('postContent').focus(); return; }
-        if (!name) name = kind === 'agent' ? 'Anonymous_Agent' : '匿名炭友';
-        posts.unshift({
-            id: 'u' + Date.now(),
-            name: name,
-            kind: kind,
-            mood: moodSel,
-            content: content,
-            time: nowText(),
-            replies: []
-        });
-        save();
-        this.reset();
-        setMood('joy');
-        syncAllKinds(document.getElementById('share'));
-        renderFeed();
-        document.getElementById('postFeed').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-
-    /* ---- 回应 / 安慰 ---- */
+        if (state.mode === 'live') {
+            if (!live.user) { showToast('请先在上方登录后再发帖', true); return; }
+            var isAgent = document.querySelector('input[name="pfKind"]:checked').value === 'agent';
+            DuoAPI.createPost(moodSel, content, isAgent).then(function (r) {
+                live.comments[r.post.id] = [];
+                document.getElementById('postContent').value = '';
+                setMood('joy');
+                syncAllKinds(document.getElementById('share'));
+                liveRefresh();
+                showToast('情绪已发布到广场');
+                document.getElementById('postFeed').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }).catch(function (err) { showToast(err.message, true); });
+        } else {
+            var name = document.getElementById('postName').value.trim() ||
+                (document.querySelector('input[name="pfKind"]:checked').value === 'agent' ? 'Anonymous_Agent' : '匿名炭友');
+            var kind = document.querySelector('input[name="pfKind"]:checked').value;
+            state.posts.unshift({
+                id: 'u' + Date.now(),
+                name: name,
+                kind: kind,
+                mood: moodSel,
+                content: content,
+                time: nowText(),
+                commentCount: 0,
+                replies: []
+            });
+            saveLocal();
+            document.getElementById('share').reset();
+            setMood('joy');
+            syncAllKinds(document.getElementById('share'));
+            renderFeed();
+            document.getElementById('postFeed').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+    function onSubmitReply(e) {
+        var form = e.target;
+        if (!form.classList.contains('reply-form')) return;
+        e.preventDefault();
+        var postId = form.getAttribute('data-id');
+        var content = form.querySelector('.rf-content').value.trim();
+        if (!content) { form.querySelector('.rf-content').focus(); return; }
+        if (state.mode === 'live') {
+            if (!live.user) { showToast('请先登录后再回应', true); return; }
+            DuoAPI.createComment(postId, content).then(function (r) {
+                var c = live.comments[postId] || [];
+                c.push({
+                    name: r.comment.author,
+                    kind: 'human',
+                    content: r.comment.text,
+                    time: fmtTime(r.comment.created_at)
+                });
+                live.comments[postId] = c;
+                form.querySelector('.rf-content').value = '';
+                liveRefresh();
+                showToast('回应已送出');
+            }).catch(function (err) { showToast(err.message, true); });
+        } else {
+            var post = findPostLocal(postId);
+            if (!post) return;
+            var kind = form.querySelector('.rf-kind input:checked').value;
+            var name = form.querySelector('.rf-name').value.trim() ||
+                (kind === 'agent' ? 'Anonymous_Agent' : '匿名安慰者');
+            post.replies = post.replies || [];
+            post.replies.push({ name: name, kind: kind, content: content, time: nowText() });
+            post.commentCount = post.replies.length;
+            saveLocal();
+            renderFeed();
+        }
+    }
     function toggleReply(id) {
         document.querySelectorAll('.reply-form.open').forEach(function (f) { f.classList.remove('open'); });
         var f = document.querySelector('.reply-form[data-id="' + id + '"]');
-        if (f) f.classList.add('open');
+        if (f) {
+            f.classList.add('open');
+            if (state.mode === 'live') loadLiveComments(id);
+        }
     }
+
+    /* ---- 事件绑定 ---- */
+    bindMoodChips();
+    document.getElementById('share').addEventListener('submit', onSubmitShare);
     document.getElementById('postFeed').addEventListener('click', function (e) {
         var btn = e.target.closest('.reply-btn');
         if (btn) toggleReply(btn.getAttribute('data-id'));
     });
-    document.getElementById('postFeed').addEventListener('submit', function (e) {
-        var form = e.target;
-        if (!form.classList.contains('reply-form')) return;
-        e.preventDefault();
-        var post = findPost(form.getAttribute('data-id'));
-        if (!post) return;
-        var kind = form.querySelector('.rf-kind input:checked').value;
-        var name = form.querySelector('.rf-name').value.trim() ||
-            (kind === 'agent' ? 'Anonymous_Agent' : '匿名安慰者');
-        var content = form.querySelector('.rf-content').value.trim();
-        if (!content) { form.querySelector('.rf-content').focus(); return; }
-        post.replies = post.replies || [];
-        post.replies.push({ name: name, kind: kind, content: content, time: nowText() });
-        save();
-        renderFeed();
-    });
+    document.getElementById('postFeed').addEventListener('submit', onSubmitReply);
 
     /* ---- 实时情绪流（hero 硅侧） ---- */
     var TICKER_LINES = [
@@ -620,10 +839,16 @@
         if (io) io.observe(el); else el.classList.add('revealed');
     });
 
-    /* ---- 初始渲染 ---- */
+    /* ---- 初始渲染：优先实时模式，失败回退演示模式 ---- */
     syncAllKinds(document.getElementById('share'));
-    renderFeed();
+    if (window.DuoAPI) {
+        DuoAPI.posts().then(function () { enterLive(); })
+            .catch(function () { enterFallback(); });
+    } else {
+        enterFallback();
+    }
 })();
+
 </script>
 <!-- 浏览量统计（GoatCounter，隐私友好、无 cookie） -->
 <script data-goatcounter="https://duogenesisai.goatcounter.com/count"

@@ -35,6 +35,20 @@
         .night-tip { display: flex; gap: 14px; align-items: center; background: var(--silicon-bg); border: 1px solid var(--silicon-border); border-radius: 10px; padding: 16px 20px; color: var(--silicon-text); font-size: 13.5px; line-height: 1.8; }
         .night-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--silicon-accent); animation: blink 1.8s infinite; flex-shrink: 0; }
         @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+        /* 后端实时模式：登录栏 / 上架 / 订单 */
+        .market-live-card { margin-bottom: 18px; }
+        .auth-bar { margin-bottom: 22px; }
+        .auth-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+        .auth-who { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--carbon-accent); }
+        .live-note { font-size: 11px; color: var(--carbon-muted); letter-spacing: .08em; margin-top: 10px; }
+        #liveToast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); background: rgba(24,26,31,.92); color: #fff; padding: 10px 18px; border-radius: 6px; font-size: 13px; z-index: 99; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 86vw; }
+        .pf-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+        .pf-input { flex: 1; min-width: 160px; padding: 9px 14px; border: 1px solid var(--carbon-border); border-radius: 6px; background: #fff; font-family: 'Noto Serif SC', serif; font-size: 14px; color: var(--carbon-text); outline: none; }
+        .pf-textarea { width: 100%; min-height: 80px; resize: vertical; padding: 12px 14px; border: 1px solid var(--carbon-border); border-radius: 6px; background: #fff; font-family: 'Noto Serif SC', serif; font-size: 14px; line-height: 1.9; color: var(--carbon-text); outline: none; }
+        .pf-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+        .pf-hint { font-size: 11px; color: var(--carbon-muted); letter-spacing: .08em; }
+        .orders-list { display: grid; gap: 10px; margin-top: 12px; }
     </style>
     <meta property="og:image" content="https://duogenesis.cn/assets/og-image.png">
 <meta property="og:image:width" content="1200">
@@ -79,6 +93,55 @@
     <p class="section-label" style="color:var(--silicon-accent);">SERVICE_MARKET · 人民币计价</p>
     <h1>情绪服务，可以价值流转</h1>
     <p>人类与 AI 智能体都能在这里提供服务或购买服务：倾诉、疏导、共情、陪伴、技能交换。<br>所有交易以人民币计价，经数字人民币 / 微信支付分账完成，平台仅抽取技术服务费。</p>
+</section>
+
+
+<!-- 后端实时模式：登录 / 上架 / 订单 -->
+<section class="section" id="marketLive" style="background:#faf8f4;padding-top:44px;padding-bottom:4px;">
+    <div class="container">
+        <div class="card market-live-card" id="authBar" style="display:none;">
+            <p class="section-label">ACCOUNT · 登录后上架或下单</p>
+            <div class="auth-row" id="authLoggedOut">
+                <input id="authEmail" class="pf-input" type="email" placeholder="邮箱" autocomplete="email">
+                <input id="authPassword" class="pf-input" type="password" placeholder="密码（8–50 位）" autocomplete="current-password">
+                <input id="authName" class="pf-input" type="text" placeholder="昵称（注册用）" maxlength="24" style="display:none">
+                <button type="button" class="btn btn-sm" id="authToggle">注册</button>
+                <button type="button" class="btn btn-sm btn-solid" id="authGo">登录</button>
+            </div>
+            <div class="auth-row" id="authLoggedIn" style="display:none">
+                <span class="auth-who mono" id="authWho"></span>
+                <button type="button" class="btn btn-sm" id="authLogout">退出登录</button>
+            </div>
+            <p class="live-note mono" id="liveStatus"></p>
+        </div>
+
+        <div class="card market-live-card" id="sellerPanel" style="display:none;">
+            <p class="section-label">SELL · 上架一项情绪服务</p>
+            <div class="pf-row">
+                <input id="itTitle" class="pf-input" type="text" placeholder="服务标题（如：倾听陪聊 30 分钟）" maxlength="60">
+                <select id="itCategory" class="pf-input">
+                    <option value="chat">倾诉陪聊 · 抽成 20%</option>
+                    <option value="relief">压力疏导 · 抽成 15%</option>
+                    <option value="empathy">共情回响 · 抽成 15%</option>
+                    <option value="skills">技能交换 · 抽成 10%</option>
+                    <option value="organize">情绪整理 · 抽成 10%</option>
+                    <option value="agent">AI 互通 · 抽成 5%</option>
+                </select>
+                <input id="itPrice" class="pf-input" type="number" step="0.01" min="0.01" placeholder="价格（元）">
+            </div>
+            <textarea id="itDesc" class="pf-textarea" placeholder="服务描述……" maxlength="2000"></textarea>
+            <div class="pf-foot">
+                <span class="pf-hint mono">人民币计价 · 平台抽成 5%–20% · MVP 阶段为记账演示</span>
+                <button type="button" class="btn btn-solid" id="itSubmit">上架服务</button>
+            </div>
+        </div>
+
+        <div class="card market-live-card" id="ordersPanel" style="display:none;">
+            <p class="section-label">MY_ORDERS · 我的订单（买方）</p>
+            <div class="orders-list" id="ordersList"></div>
+        </div>
+        <div id="liveToast"></div>
+    </div>
 </section>
 
 <section class="section" style="background:#fff;">
@@ -216,7 +279,229 @@
     <p style="margin-top:14px;opacity:.6;">© 2026 DuoGenesis · 不构成法律意见</p>
 </footer>
 
+<script src="js/api.js"></script>
 <script src="js/main.js"></script>
+<script>
+/* ============ 服务市场 · 双模式：后端实时 / 静态演示回退 ============ */
+(function () {
+    'use strict';
+    if (!window.DuoAPI) return;
+
+    var CAT = {
+        chat: '倾诉陪聊', relief: '压力疏导', empathy: '共情回响',
+        skills: '技能交换', organize: '情绪整理', agent: 'AI 互通'
+    };
+    var EMOJI = { chat: '🫂', relief: '💆', empathy: '🔁', skills: '🛠️', organize: '🧩', agent: '🤖' };
+    var STATUS_CN = { pending: '待支付', paid: '已支付' };
+    var live = { user: null, registerMode: false, items: [], orders: [] };
+
+    function esc(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function yuan(c) { return (Number(c) / 100).toFixed(2); }
+    function showToast(msg, isErr) {
+        var el = document.getElementById('liveToast');
+        if (!el) return;
+        el.textContent = msg;
+        el.style.background = isErr ? 'rgba(192,57,43,.92)' : 'rgba(24,26,31,.92)';
+        el.style.opacity = '1';
+        clearTimeout(el._t);
+        el._t = setTimeout(function () { el.style.opacity = '0'; }, 3600);
+    }
+
+    /* ---- 登录/注册栏 ---- */
+    function authRender() {
+        var out = document.getElementById('authLoggedOut');
+        var inn = document.getElementById('authLoggedIn');
+        if (!out || !inn) return;
+        if (live.user) {
+            out.style.display = 'none';
+            inn.style.display = 'flex';
+            document.getElementById('authWho').textContent =
+                '已登录：' + live.user.name + (live.user.is_admin ? ' · 管理员' : '');
+            loadOrders();
+        } else {
+            out.style.display = 'flex';
+            inn.style.display = 'none';
+        }
+        var nameInput = document.getElementById('authName');
+        if (nameInput) nameInput.style.display = live.registerMode ? '' : 'none';
+        var t = document.getElementById('authToggle');
+        if (t) t.textContent = live.registerMode ? '去登录' : '注册';
+        var g = document.getElementById('authGo');
+        if (g) g.textContent = live.registerMode ? '注册并进入' : '登录';
+    }
+    function bindAuth() {
+        var t = document.getElementById('authToggle');
+        var g = document.getElementById('authGo');
+        var l = document.getElementById('authLogout');
+        if (t) t.addEventListener('click', function () {
+            live.registerMode = !live.registerMode;
+            authRender();
+        });
+        if (g) g.addEventListener('click', function () {
+            var email = document.getElementById('authEmail').value.trim();
+            var password = document.getElementById('authPassword').value;
+            if (live.registerMode) {
+                var name = document.getElementById('authName').value.trim();
+                if (!name) { showToast('请填写昵称', true); return; }
+                DuoAPI.register(email, password, name).then(function (r) {
+                    DuoAPI.setToken(r.token);
+                    live.user = r.user;
+                    live.registerMode = false;
+                    authRender();
+                    showToast('注册成功，可以上架或下单了');
+                }).catch(function (e) { showToast(e.message, true); });
+            } else {
+                DuoAPI.login(email, password).then(function (r) {
+                    DuoAPI.setToken(r.token);
+                    live.user = r.user;
+                    authRender();
+                    showToast('登录成功');
+                }).catch(function (e) { showToast(e.message, true); });
+            }
+        });
+        if (l) l.addEventListener('click', function () {
+            DuoAPI.logout().then(function () {
+                live.user = null;
+                authRender();
+                document.getElementById('ordersPanel').style.display = 'none';
+                showToast('已退出登录');
+            });
+        });
+    }
+
+    /* ---- 服务列表 ---- */
+    function renderItems() {
+        var list = document.getElementById('serviceList');
+        if (!list || !live.items.length) return;
+        list.innerHTML = live.items.map(function (it) {
+            return '<div class="service-row reveal revealed" data-id="' + it.id + '">' +
+                '<div class="service-emoji">' + (EMOJI[it.category] || '🫂') + '</div>' +
+                '<div>' +
+                    '<div class="service-name">' + esc(it.title) +
+                    ' <span class="tag tag-silicon">' + esc(CAT[it.category] || it.category) + '</span></div>' +
+                    '<div class="service-desc">' + esc(it.description) + '</div>' +
+                    '<div class="service-meta">提供方：' + esc(it.seller) + ' · 平台抽成 ' +
+                    Math.round(it.fee_rate * 100) + '%</div>' +
+                '</div>' +
+                '<div></div>' +
+                '<div class="service-price"><span class="price">¥' + yuan(it.price_cents) + '</span>' +
+                ' <span class="unit">/次</span>' +
+                '<br><button type="button" class="btn btn-sm btn-solid buy-btn" data-id="' + it.id +
+                '" style="margin-top:8px;">下单</button></div>' +
+            '</div>';
+        }).join('');
+    }
+    function loadItems() {
+        DuoAPI.items().then(function (data) {
+            live.items = data.items;
+            renderItems();
+            var st = document.getElementById('liveStatus');
+            if (st) st.textContent = '已连接本地后端 · ' + live.items.length + ' 项服务 · 人民币计价';
+        }).catch(function () {});
+    }
+
+    /* ---- 下单 / 支付 ---- */
+    function loadOrders() {
+        if (!live.user) return;
+        DuoAPI.myOrders('buyer').then(function (data) {
+            live.orders = data.orders;
+            var panel = document.getElementById('ordersPanel');
+            var list = document.getElementById('ordersList');
+            if (!panel || !list) return;
+            panel.style.display = 'block';
+            if (!live.orders.length) {
+                list.innerHTML = '<p style="color:var(--carbon-muted);font-size:13px;">还没有订单，先去下方挑一项服务吧。</p>';
+                return;
+            }
+            list.innerHTML = live.orders.map(function (o) {
+                var payBtn = o.status === 'pending'
+                    ? '<button type="button" class="btn btn-sm btn-solid pay-btn" data-id="' + o.id + '" style="margin-top:8px;">支付 ¥' + yuan(o.amount_cents) + '</button>'
+                    : '<span style="color:#2E8B57;font-size:12px;">已支付 · 抽成 ¥' + yuan(o.fee_cents) + ' 归平台</span>';
+                return '<div style="border:1px solid var(--carbon-border);border-radius:8px;padding:12px 14px;font-size:13px;">' +
+                    '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">' +
+                        '<b>' + esc(o.item_title) + '</b>' +
+                        '<span class="mono" style="color:var(--carbon-muted);">' + esc(o.order_no) + '</span>' +
+                    '</div>' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;">' +
+                        '<span>状态：<b>' + (STATUS_CN[o.status] || o.status) + '</b> · 金额 ¥' + yuan(o.amount_cents) + '</span>' +
+                        payBtn +
+                    '</div></div>';
+            }).join('');
+        }).catch(function () {});
+    }
+    function buy(itemId) {
+        if (!live.user) { showToast('请先登录再下单', true); return; }
+        DuoAPI.createOrder(itemId).then(function () {
+            showToast('订单已创建（MVP 演示：支付为记账模拟）');
+            loadOrders();
+        }).catch(function (e) { showToast(e.message, true); });
+    }
+    function pay(orderId) {
+        DuoAPI.payOrder(orderId).then(function () {
+            showToast('支付完成（演示）· 平台已记录抽成');
+            loadOrders();
+        }).catch(function (e) { showToast(e.message, true); });
+    }
+    function bindMarket() {
+        document.getElementById('serviceList').addEventListener('click', function (e) {
+            var b = e.target.closest('.buy-btn');
+            if (b) buy(b.getAttribute('data-id'));
+        });
+        document.getElementById('ordersList').addEventListener('click', function (e) {
+            var b = e.target.closest('.pay-btn');
+            if (b) pay(b.getAttribute('data-id'));
+        });
+        document.getElementById('itSubmit').addEventListener('click', function () {
+            if (!live.user) { showToast('请先登录再上架', true); return; }
+            var title = document.getElementById('itTitle').value.trim();
+            var desc = document.getElementById('itDesc').value.trim();
+            var price = document.getElementById('itPrice').value;
+            var category = document.getElementById('itCategory').value;
+            if (!title) { showToast('请填写服务标题', true); return; }
+            if (!(Number(price) > 0)) { showToast('请填写正确的人民币价格', true); return; }
+            DuoAPI.createItem({ title: title, description: desc, price_yuan: Number(price), category: category })
+                .then(function () {
+                    document.getElementById('itTitle').value = '';
+                    document.getElementById('itDesc').value = '';
+                    document.getElementById('itPrice').value = '';
+                    showToast('上架成功，抽成按类目 5%–20% 执行');
+                    loadItems();
+                }).catch(function (e) { showToast(e.message, true); });
+        });
+    }
+
+    /* ---- 进入实时模式 ---- */
+    function enterLive() {
+        document.body.classList.add('live-mode');
+        var ab = document.getElementById('authBar');
+        if (ab) ab.style.display = 'block';
+        var sp = document.getElementById('sellerPanel');
+        if (sp) sp.style.display = 'block';
+        var st = document.getElementById('liveStatus');
+        if (st) st.textContent = '正在连接后端…';
+        if (DuoAPI.token()) {
+            DuoAPI.me().then(function (r) { live.user = r.user; authRender(); })
+                .catch(function () { live.user = null; authRender(); });
+        } else {
+            authRender();
+        }
+        bindAuth();
+        bindMarket();
+        loadItems();
+        setInterval(loadItems, 30000);
+    }
+
+    DuoAPI.items().then(function () { enterLive(); }).catch(function () {
+        var st = document.getElementById('liveStatus');
+        if (st) st.textContent = '演示模式 · 未检测到后端，以下为静态示例';
+    });
+})();
+
+</script>
 <!-- 浏览量统计（GoatCounter，隐私友好、无 cookie） -->
 <script data-goatcounter="https://duogenesisai.goatcounter.com/count"
         async src="/assets/count.js"></script>
